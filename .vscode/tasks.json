@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Save current page.js backup",
+			"type": "shell",
+			"command": "cp '/Users/priyanshujain/Projects/flexee2ui/src/app/dashboard/student/reports/[id]/page.js' '/Users/priyanshujain/Projects/flexee2ui/src/app/dashboard/student/reports/[id]/page.backup.js'"
+		}
+	]
+}

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/context/ThemeContext";
+import InviteStudentsModal from "./components/InviteStudentsModal";
 
 // ─── ADVANCED MODULES ─────────────────────────────────────────────────────────
 const ADVANCED_MODULES = {
@@ -157,6 +158,20 @@ function ModuleChip({ count, isDark, t }) {
   );
 }
 
+// ─── ICON USERS ───────────────────────────────────────────────────────────────
+function IconUsers({ size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  );
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function FacultyDashboard() {
   const { isDark, toggleTheme } = useTheme();
@@ -166,6 +181,9 @@ export default function FacultyDashboard() {
   const [error,        setError]        = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQuery,  setSearchQuery]  = useState("");
+  const [showInviteModal, setShowInviteModal]   = useState(false);
+  const [inviteSimulation, setInviteSimulation] = useState(null);
+  const [success, setSuccess]                   = useState("");
   const router = useRouter();
 
   const t = isDark ? DARK : LIGHT;
@@ -496,11 +514,25 @@ export default function FacultyDashboard() {
               </div>
             )}
 
+            {/* Success banner */}
+            {success && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "10px 16px",
+                background: t.greenBg, borderBottom: `1px solid ${isDark ? "rgba(63,185,80,0.25)" : "#6EE7B7"}`,
+              }}>
+                <svg width="14" height="14" fill="none" stroke={t.green} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span style={{ fontSize: 13, color: t.green, flex: 1 }}>{success}</span>
+                <button onClick={() => setSuccess("")} style={{ background: "none", border: "none", color: t.green, cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+              </div>
+            )}
+
             {/* Column headers
                 Simulation | Course | Status | Quarter | Firms · Students | Modules | Action */}
             <div style={{
               display: "grid",
-              gridTemplateColumns: "2.4fr 0.75fr 1fr 0.85fr 1.1fr 0.65fr 120px",
+              gridTemplateColumns: "2.4fr 0.75fr 1fr 0.85fr 1.1fr 0.65fr 165px",
               padding: "9px 16px",
               background: t.tableHead, borderBottom: `1px solid ${t.border}`,
             }}>
@@ -529,7 +561,7 @@ export default function FacultyDashboard() {
                 <div key={idx} className="sim-row fade-row" style={{
                   animationDelay: `${idx * 0.03}s`,
                   display: "grid",
-                  gridTemplateColumns: "2.4fr 0.75fr 1fr 0.85fr 1.1fr 0.65fr 120px",
+                  gridTemplateColumns: "2.4fr 0.75fr 1fr 0.85fr 1.1fr 0.65fr 165px",
                   padding: "13px 16px",
                   borderBottom: `1px solid ${t.border}`,
                   alignItems: "center",
@@ -645,8 +677,8 @@ export default function FacultyDashboard() {
                     <ModuleChip count={modCount} isDark={isDark} t={t} />
                   </div>
 
-                  {/* Manage button */}
-                  <div style={{ display: "flex", justifyContent: "center" }}>
+                  {/* Manage button + Invite icon */}
+                  <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6 }}>
                     <Link href={`/dashboard/faculty/simulations/${sim._id}`} style={{ textDecoration: "none" }}>
                       <button className="manage-btn" style={{
                         display: "flex", alignItems: "center", gap: 5,
@@ -662,6 +694,37 @@ export default function FacultyDashboard() {
                         </svg>
                       </button>
                     </Link>
+
+                    {/* Invite icon — opens the quick-invite modal */}
+                    <button
+                      onClick={() => {
+                        setInviteSimulation(sim);
+                        setShowInviteModal(true);
+                      }}
+                      title="Invite students"
+                      aria-label="Invite students"
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        width: 30, height: 30, borderRadius: 6,
+                        background: "transparent",
+                        border: `1px solid ${t.border}`,
+                        color: t.textMuted, cursor: "pointer",
+                        transition: "background-color 0.15s, border-color 0.15s, color 0.15s",
+                        flexShrink: 0,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = isDark ? t.accentLight : "#EFF6FF";
+                        e.currentTarget.style.borderColor = t.accent;
+                        e.currentTarget.style.color = t.accent;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "transparent";
+                        e.currentTarget.style.borderColor = t.border;
+                        e.currentTarget.style.color = t.textMuted;
+                      }}
+                    >
+                      <IconUsers size={13} />
+                    </button>
                   </div>
 
                 </div>
@@ -749,6 +812,22 @@ export default function FacultyDashboard() {
 
         </div>
       </div>
+
+      {/* Invite students modal — opens from the row icon */}
+      <InviteStudentsModal
+        show={showInviteModal}
+        onClose={() => {
+          setShowInviteModal(false);
+          setInviteSimulation(null);
+        }}
+        simulation={inviteSimulation}
+        theme={t}
+        isDark={isDark}
+        onInviteSent={() => {
+          setSuccess("Invite sent successfully");
+          setTimeout(() => setSuccess(""), 3000);
+        }}
+      />
     </>
   );
 }

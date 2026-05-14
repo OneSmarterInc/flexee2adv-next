@@ -1,7 +1,25 @@
 "use client";
 
+/**
+ * CreateSimulationModal.jsx — Corporate Edition (rich-shape schedule)
+ *
+ * Sends moduleSchedule in the rich shape the backend now expects:
+ *
+ *   moduleSchedule: {
+ *     mode: 'CUSTOM',
+ *     modules: [
+ *       { moduleId: 'vmi',                order: 1, unlocksAtQuarter: 4, enabled: true },
+ *       { moduleId: 'regionalDCs',         order: 2, unlocksAtQuarter: 5, enabled: true },
+ *       { moduleId: 'multiCarrierSelection', order: 3, unlocksAtQuarter: 4, enabled: false },
+ *       ...
+ *     ]
+ *   }
+ *
+ * Visually nothing changes — same toggle + "Opens at Q__" dropdown per module,
+ * same Enable All / Disable All buttons, same flow.
+ */
+
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 
 const LIGHT = {
   bgPage: "#F3F4F6", bgSurface: "#FFFFFF", bgElevated: "#F9FAFB",
@@ -24,57 +42,65 @@ const DARK = {
   shadow: "0 1px 3px rgba(0,0,0,0.30)", shadowMd: "0 4px 12px rgba(0,0,0,0.40)",
 };
 
+// ─── Backend module keys, grouped for display ────────────────────────────────
 const FEATURE_GROUPS = [
   {
     label: "Supply Chain",
     features: [
-      { key: "supplierSelection",     label: "Supplier Selection",       desc: "Firms choose from multiple supplier tiers with different cost/quality tradeoffs" },
-      { key: "vmi",                   label: "Vendor Managed Inventory",  desc: "Firms can invest in VMI to stabilize retailer ordering behavior" },
-      { key: "regionalDCs",          label: "Regional Distribution Centers", desc: "Central and West DC options that improve regional service levels" },
-      { key: "multiCarrierSelection", label: "Multi-Carrier Selection",  desc: "Intermodal / Truck / Air Freight with cost and on-time tradeoffs" },
+      { key: "vmi",                   label: "Vendor Managed Inventory",      desc: "Firms can invest in VMI to stabilise retailer ordering behaviour." },
+      { key: "regionalDCs",           label: "Regional Distribution Centres", desc: "Central and West DC options that improve regional service levels." },
+      { key: "multiCarrierSelection", label: "Multi-Carrier Selection",       desc: "Intermodal, truck, and air freight with cost / on-time tradeoffs." },
     ],
   },
   {
     label: "Operations",
     features: [
-      { key: "productionExpansion",  label: "Production Expansion",      desc: "Firms can invest in new production lines (Small / Medium / Large)" },
-      { key: "qualityManagement",    label: "Quality Management",         desc: "Inspection levels and rework decisions affect defect rates and CSI" },
-      { key: "technologyInvestment", label: "Technology Investment",      desc: "ERP, TMS, WMS, APS and other systems with measurable cost/benefit effects" },
-      { key: "globalExpansion",      label: "Global Market Expansion",    desc: "Canada, EU, and APAC region entry with varying barriers and growth rates" },
-    ],
-  },
-  {
-    label: "Finance & Risk",
-    features: [
-      { key: "creditManagement",     label: "Credit Management",         desc: "Dynamic credit scoring, tiers, and overlimit fee mechanics" },
-      { key: "scrmEnabled",          label: "SCRM Risk Assessment",       desc: "Supply-chain risk scoring with disruption probability and mitigation options" },
-      { key: "warrantyManagement",   label: "Warranty Management",        desc: "Three-tier warranty offering with return/recall cost implications" },
+      { key: "capacityExpansion",   label: "Capacity Expansion",       desc: "Firms can build new production lines — small, medium, or large." },
+      { key: "productInnovation",   label: "Product Innovation (P3)",  desc: "Allow firms to launch and manage a third product line." },
+      { key: "marketExpansion",     label: "Market Expansion (R4–R6)", desc: "Open new regional markets beyond the default three regions." },
     ],
   },
   {
     label: "Intelligence & Reporting",
     features: [
-      { key: "intelligenceCenter",   label: "Intelligence Center",        desc: "Paid market intelligence reports (competitor pricing, regional demand, etc.)" },
-      { key: "returnsGreenScore",    label: "Green Score & Returns",      desc: "ESG scoring based on disposal method, packaging, and return rates" },
-      { key: "newProductDevelopment", label: "New Product Development",  desc: "Firms can launch a third product line (P3) with custom configuration" },
+      { key: "intelligenceCenter", label: "Intelligence Center",   desc: "Paid market intelligence reports — competitor pricing, regional demand, supplier risk." },
+      { key: "returnsGreenScore",  label: "Returns & Green Score", desc: "ESG scoring based on disposal method, packaging, and return rates." },
+      { key: "analyticsMode",      label: "Analytics Mode",        desc: "Advanced analytics — customer segments, supplier scorecards, scenario modelling." },
     ],
   },
 ];
 
+// Order matters — this drives the `order` field sent to the backend
 const ALL_FEATURE_KEYS = FEATURE_GROUPS.flatMap(g => g.features.map(f => f.key));
+const orderOf = (key) => ALL_FEATURE_KEYS.indexOf(key) + 1;
+
 const DEFAULT_FIRM_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"];
+const FIRST_DECISION_QUARTER = 4;
+
+// Build the modules[] array with sensible defaults — all enabled, all at Q4.
+// The UI mutates this in place via setModule.
+const buildInitialModules = () =>
+  ALL_FEATURE_KEYS.map((key) => ({
+    moduleId: key,
+    order: orderOf(key),
+    unlocksAtQuarter: FIRST_DECISION_QUARTER,
+    enabled: false, // start with all OFF; faculty opts in
+  }));
+
+const INITIAL_FORM = {
+  name: "", description: "", courseCode: "", institutionName: "",
+  numFirms: 3, maxQuarters: 12,
+  modules: buildInitialModules(),
+  firmConfigs: [],
+  facultyIds: [],
+};
 
 export default function CreateSimulationModal({ show, onClose, isDark }) {
   const t = isDark ? DARK : LIGHT;
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   const getToken = () => localStorage.getItem("access_token");
 
-  const [form, setForm] = useState({
-    name: "", description: "", courseCode: "", institutionName: "",
-    numFirms: 3, maxQuarters: 12, features: {}, firmConfigs: [],
-    facultyIds: [], visibility: "private",
-  });
-
+  const [form, setForm] = useState(INITIAL_FORM);
   const [firmNames, setFirmNames] = useState(["Firm 1", "Firm 2", "Firm 3"]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -82,7 +108,7 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
   const [facultyLoading, setFacultyLoading] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  // Fetch faculty list on component mount
+  // Fetch faculty list on mount
   useEffect(() => {
     const fetchFaculty = async () => {
       try {
@@ -102,6 +128,7 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
     fetchFaculty();
   }, []);
 
+  // Sync firmNames length to numFirms
   useEffect(() => {
     setFirmNames(prev => {
       const next = [...prev];
@@ -110,11 +137,66 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
     });
   }, [form.numFirms]);
 
+  // Auto-clamp unlock quarters when maxQuarters shrinks
+  useEffect(() => {
+    setForm(f => {
+      const needsClamp = f.modules.some(m => m.unlocksAtQuarter > f.maxQuarters);
+      if (!needsClamp) return f;
+      return {
+        ...f,
+        modules: f.modules.map(m => ({
+          ...m,
+          unlocksAtQuarter: Math.min(m.unlocksAtQuarter, f.maxQuarters),
+        })),
+      };
+    });
+  }, [form.maxQuarters]);
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
   const set = (key, value) => setForm(f => ({ ...f, [key]: value }));
-  const toggleFeature = (key) => setForm(f => ({ ...f, features: { ...f.features, [key]: !f.features[key] } }));
-  const enableAll = () => setForm(f => ({ ...f, features: Object.fromEntries(ALL_FEATURE_KEYS.map(k => [k, true])) }));
-  const disableAll = () => setForm(f => ({ ...f, features: {} }));
-  const enabledCount = ALL_FEATURE_KEYS.filter(k => form.features[k]).length;
+
+  // Patch a single module by its moduleId
+  const patchModule = (key, patch) => {
+    setForm(f => ({
+      ...f,
+      modules: f.modules.map(m => (m.moduleId === key ? { ...m, ...patch } : m)),
+    }));
+  };
+
+  const toggleFeature = (key) => {
+    const current = form.modules.find(m => m.moduleId === key);
+    patchModule(key, { enabled: !current?.enabled });
+  };
+
+  const setModuleQuarter = (key, quarter) => {
+    patchModule(key, { unlocksAtQuarter: quarter });
+  };
+
+  const enableAll = () => {
+    setForm(f => ({
+      ...f,
+      modules: f.modules.map(m => ({
+        ...m,
+        enabled: true,
+        unlocksAtQuarter: m.unlocksAtQuarter ?? FIRST_DECISION_QUARTER,
+      })),
+    }));
+  };
+
+  const disableAll = () => {
+    setForm(f => ({
+      ...f,
+      modules: f.modules.map(m => ({ ...m, enabled: false })),
+    }));
+  };
+
+  const enabledCount = form.modules.filter(m => m.enabled).length;
+
+  // Quarter choices for the per-module dropdown
+  const quarterChoices = [];
+  for (let q = FIRST_DECISION_QUARTER; q <= form.maxQuarters; q++) {
+    quarterChoices.push(q);
+  }
 
   const toggleFacultySelection = (facultyId) => {
     setForm(f => ({
@@ -132,21 +214,42 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
       .join(", ");
   };
 
+  // ─── Submit ───────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!form.name.trim()) { setError("Simulation name is required."); return; }
     if (form.facultyIds.length === 0) { setError("Please select at least one faculty member."); return; }
-    
+
+    // Orphan check — block submit if any enabled module unlocks past sim end
+    const orphans = form.modules.filter(
+      m => m.enabled && m.unlocksAtQuarter > form.maxQuarters
+    );
+    if (orphans.length > 0) {
+      setError(`${orphans.length} module(s) unlock after the simulation ends. Adjust the schedule or increase Simulation Length.`);
+      return;
+    }
+
     setLoading(true); setError("");
 
     const configs = firmNames
       .map((name, i) => ({ firmNumber: i + 1, name: name.trim() || `Firm ${i + 1}`, color: DEFAULT_FIRM_COLORS[i] }))
       .filter((c, i) => c.name !== `Firm ${i + 1}`);
 
+    // Determine preset label for the mode field
+    const allOpen = form.modules.every(m => m.enabled && m.unlocksAtQuarter === FIRST_DECISION_QUARTER);
+    const mode = allOpen ? "ALL_OPEN" : "CUSTOM";
+
     const payload = {
-      name: form.name.trim(), description: form.description.trim() || undefined,
-      courseCode: form.courseCode.trim() || undefined, institutionName: form.institutionName.trim() || undefined,
-      numFirms: form.numFirms, maxQuarters: form.maxQuarters, features: form.features,
-      facultyIds: form.facultyIds, visibility: form.visibility,
+      name: form.name.trim(),
+      description: form.description.trim() || undefined,
+      courseCode: form.courseCode.trim() || undefined,
+      institutionName: form.institutionName.trim() || undefined,
+      numFirms: form.numFirms,
+      maxQuarters: form.maxQuarters,
+      facultyIds: form.facultyIds,
+      moduleSchedule: {
+        mode,
+        modules: form.modules,
+      },
       ...(configs.length > 0 && { firmConfigs: configs }),
     };
 
@@ -172,7 +275,7 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
   };
 
   const handleClose = () => {
-    setForm({ name: "", description: "", courseCode: "", institutionName: "", numFirms: 3, maxQuarters: 12, features: {}, firmConfigs: [], facultyIds: [], visibility: "private" });
+    setForm({ ...INITIAL_FORM, modules: buildInitialModules() });
     setFirmNames(["Firm 1", "Firm 2", "Firm 3"]);
     setError("");
     setDropdownOpen(false);
@@ -186,6 +289,9 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
   const sectionTitleStyle = { fontSize: 13, fontWeight: 700, color: t.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 18 };
 
   if (!show) return null;
+
+  // Lookup helper for the render loop
+  const moduleOf = (key) => form.modules.find(m => m.moduleId === key);
 
   return (
     <div style={{
@@ -236,14 +342,14 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
             </div>
           )}
 
-          {/* Section 1: Identity */}
+          {/* ── Section 1: Identity ── */}
           <div style={cardStyle}>
             <p style={sectionTitleStyle}>Simulation Identity</p>
             <div style={{ marginBottom: 18 }}>
               <label style={labelStyle}>
                 Simulation Name <span style={{ color: t.red }}>*</span>
               </label>
-              <input style={inputStyle} placeholder="e.g. Spring 2025 — SCM 401"
+              <input style={inputStyle} placeholder="e.g. Spring 2026 — SCM 401"
                 value={form.name} onChange={e => set("name", e.target.value)} maxLength={100}
               />
             </div>
@@ -270,7 +376,7 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
             </div>
           </div>
 
-          {/* Section 2: Structure */}
+          {/* ── Section 2: Structure ── */}
           <div style={cardStyle}>
             <p style={sectionTitleStyle}>Simulation Structure</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
@@ -306,22 +412,21 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
                     </button>
                   ))}
                 </div>
-                <p style={hintStyle}>Quarter 1 is pre-seeded. 12 quarters ≈ one semester.</p>
+                <p style={hintStyle}>Q1–Q3 are pre-seeded. Decisions begin at Q4.</p>
               </div>
             </div>
           </div>
 
-          {/* Section 3: Faculty & Access Control */}
+          {/* ── Section 3: Faculty ── */}
           <div style={cardStyle}>
-            <p style={sectionTitleStyle}>Faculty & Access Control</p>
-            
-            {/* Faculty Selection */}
-            <div style={{ marginBottom: 20 }}>
+            <p style={sectionTitleStyle}>Faculty</p>
+
+            <div style={{ marginBottom: 0 }}>
               <label style={labelStyle}>
                 Faculty Members <span style={{ color: t.red }}>*</span>
               </label>
               <div style={{ position: "relative" }}>
-                <button 
+                <button
                   onClick={() => setDropdownOpen(!dropdownOpen)}
                   style={{
                     ...inputStyle,
@@ -332,7 +437,7 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
                   <span>{form.facultyIds.length === 0 ? "Select faculty members..." : getSelectedFacultyNames()}</span>
                   <span style={{ fontSize: 12 }}>▼</span>
                 </button>
-                
+
                 {dropdownOpen && (
                   <div style={{
                     position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4,
@@ -381,42 +486,13 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
               </div>
               <p style={hintStyle}>Selected: {form.facultyIds.length} faculty member(s)</p>
             </div>
-
-            {/* Visibility/Privacy Toggle */}
-            <div>
-              <label style={labelStyle}>Visibility</label>
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                {[
-                  { value: "private", label: "🔒 Private", desc: "Only you and selected faculty can access" },
-                  { value: "public", label: "🌐 Public", desc: "Anyone with invitation link can join" },
-                ].map(option => (
-                  <button
-                    key={option.value}
-                    onClick={() => set("visibility", option.value)}
-                    style={{
-                      flex: "1", minWidth: 200, padding: "12px 14px", borderRadius: 10,
-                      border: `2px solid ${form.visibility === option.value ? t.accent : t.border}`,
-                      background: form.visibility === option.value ? t.accentLight : t.bgElevated,
-                      cursor: "pointer", transition: "all 0.12s", textAlign: "left",
-                    }}
-                  >
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: t.textPrimary }}>
-                      {option.label}
-                    </p>
-                    <p style={{ margin: "4px 0 0", fontSize: 12, color: t.textMuted, lineHeight: 1.4 }}>
-                      {option.desc}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
-          {/* Section 4: Firm Names */}
+          {/* ── Section 4: Firm Names ── */}
           <div style={cardStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
               <p style={{ ...sectionTitleStyle, marginBottom: 0 }}>Firm Names</p>
-              <span style={{ fontSize: 12, color: t.textMuted }}>Optional — students can update these later</span>
+              <span style={{ fontSize: 12, color: t.textMuted }}>Optional — teams can update these later</span>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
               {firmNames.map((name, i) => (
@@ -440,7 +516,7 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
             </div>
           </div>
 
-          {/* Section 5: Advanced Modules */}
+          {/* ── Section 5: Advanced Modules with Scheduling ── */}
           <div style={cardStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <p style={{ ...sectionTitleStyle, marginBottom: 0 }}>Advanced Modules</p>
@@ -461,7 +537,7 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
             </div>
             <p style={{ ...hintStyle, marginBottom: 20 }}>
               {enabledCount} of {ALL_FEATURE_KEYS.length} modules enabled.
-              Modules can also be toggled after the simulation starts.
+              Each enabled module can open immediately (Q4) or be scheduled to unlock later.
             </p>
 
             {FEATURE_GROUPS.map(group => (
@@ -475,30 +551,78 @@ export default function CreateSimulationModal({ show, onClose, isDark }) {
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {group.features.map(feat => {
-                    const on = !!form.features[feat.key];
+                    const mod = moduleOf(feat.key);
+                    const on = !!mod?.enabled;
+                    const scheduledQuarter = mod?.unlocksAtQuarter ?? FIRST_DECISION_QUARTER;
+                    const isImmediate = scheduledQuarter <= FIRST_DECISION_QUARTER;
+
                     return (
-                      <div key={feat.key} onClick={() => toggleFeature(feat.key)} style={{
-                        display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", borderRadius: 10,
-                        cursor: "pointer", border: `1px solid ${on ? t.accentBorder : t.border}`,
+                      <div key={feat.key} style={{
+                        padding: "12px 14px", borderRadius: 10,
+                        border: `1px solid ${on ? t.accentBorder : t.border}`,
                         background: on ? t.accentLight : t.bgElevated, transition: "all 0.12s",
                       }}>
-                        <div style={{
-                          flexShrink: 0, marginTop: 2, width: 36, height: 20, borderRadius: 999,
-                          background: on ? t.accent : t.inputBorder, position: "relative", transition: "background 0.15s",
-                        }}>
+                        {/* Top row — toggle + label + description */}
+                        <div
+                          onClick={() => toggleFeature(feat.key)}
+                          style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}
+                        >
                           <div style={{
-                            position: "absolute", top: 3, borderRadius: "50%", width: 14, height: 14, background: "#fff",
-                            left: on ? 19 : 3, transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
-                          }} />
+                            flexShrink: 0, marginTop: 2, width: 36, height: 20, borderRadius: 999,
+                            background: on ? t.accent : t.inputBorder, position: "relative", transition: "background 0.15s",
+                          }}>
+                            <div style={{
+                              position: "absolute", top: 3, borderRadius: "50%", width: 14, height: 14, background: "#fff",
+                              left: on ? 19 : 3, transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                            }} />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: on ? t.accent : t.textPrimary }}>
+                              {feat.label}
+                            </p>
+                            <p style={{ margin: "3px 0 0", fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>
+                              {feat.desc}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: on ? t.accent : t.textPrimary }}>
-                            {feat.label}
-                          </p>
-                          <p style={{ margin: "3px 0 0", fontSize: 12, color: t.textMuted, lineHeight: 1.5 }}>
-                            {feat.desc}
-                          </p>
-                        </div>
+
+                        {/* Schedule row — only shown when module is enabled */}
+                        {on && (
+                          <div style={{
+                            display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+                            marginTop: 10, paddingTop: 10, paddingLeft: 48,
+                            borderTop: `1px dashed ${t.accentBorder}`,
+                          }}>
+                            <span style={{ fontSize: 12, color: t.textMuted, fontWeight: 500 }}>
+                              Opens at:
+                            </span>
+                            <select
+                              value={scheduledQuarter}
+                              onChange={e => setModuleQuarter(feat.key, parseInt(e.target.value, 10))}
+                              style={{
+                                padding: "4px 10px", borderRadius: 6,
+                                border: `1px solid ${t.inputBorder}`,
+                                background: t.inputBg, color: t.textPrimary,
+                                fontSize: 13, fontWeight: 600,
+                                cursor: "pointer", outline: "none",
+                              }}
+                            >
+                              {quarterChoices.map(q => (
+                                <option key={q} value={q}>
+                                  Q{q}{q === FIRST_DECISION_QUARTER ? " (start)" : ""}
+                                </option>
+                              ))}
+                            </select>
+                            <span style={{
+                              fontSize: 11, fontWeight: 600,
+                              color: isImmediate ? t.green : t.accent,
+                            }}>
+                              {isImmediate
+                                ? "Available from day one"
+                                : `Unlocks after ${scheduledQuarter - FIRST_DECISION_QUARTER} quarter${scheduledQuarter - FIRST_DECISION_QUARTER === 1 ? "" : "s"}`}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

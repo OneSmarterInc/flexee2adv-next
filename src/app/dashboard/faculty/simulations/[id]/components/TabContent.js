@@ -13,6 +13,7 @@ import LogisticsTab from "./TabContent/LogisticsTab"; // <-- added
 import SCRMTab from "./TabContent/SCRMTab"; // <-- added
 import IntelligenceTab from "./TabContent/IntelligenceTab"; // <-- added
 import VmiTab from "./TabContent/VmiTab"; // <-- VMI
+import InvitesTab from "./TabContent/InvitesTab"; // <-- student invites
 
 export default function TabContent({
   activeTab,
@@ -193,6 +194,13 @@ export default function TabContent({
           formatCurrency={formatCurrency}
           formatNumber={formatNumber}
           formatPercent={formatPercent}
+        />
+      );
+    case "invites":
+      return (
+        <InvitesTab
+          {...commonProps}
+          simulation={simulation}
         />
       );
     default:

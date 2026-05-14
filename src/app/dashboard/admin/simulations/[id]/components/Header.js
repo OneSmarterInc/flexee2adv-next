@@ -1,6 +1,9 @@
 // src/app/dashboard/faculty/simulations/[id]/components/Header.js
 "use client";
 
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
 
 const LIGHT = {
@@ -43,21 +46,13 @@ const STATUS_DARK = {
   COMPLETED:   { label: "Completed",      color: "#C4B5FD", bg: "rgba(139,92,246,0.12)",  border: "rgba(139,92,246,0.3)"  },
 };
 
-// SVG icon paths for meta chips — FIX 6: no emojis
 const ICONS = {
-  // course / tag
   tag:      "M7 7h.01M7 3H5a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2zm0 12H5a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2zm12-12h-2a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2z",
-  // institution
   building: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
-  // created date
   calendar: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-  // advance quarter
   chevron:  "M9 5l7 7-7 7",
-  // event
   bolt:     "M13 10V3L4 14h7v7l9-11h-7z",
-  // enroll
   addUser:  "M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z",
-  // features
   gear:     "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
 };
 
@@ -69,7 +64,6 @@ function Icon({ d, size = 13, color }) {
   );
 }
 
-// Small inline meta chip — FIX 2: replaces emoji badges
 function MetaChip({ icon, label, t }) {
   if (!label) return null;
   return (
@@ -86,18 +80,42 @@ function MetaChip({ icon, label, t }) {
 }
 
 /**
- * Header — sim name, meta chips, status badge, action buttons.
+ * Compute unplaced count from whatever shape the parent passed in `simulation`.
+ * Tries cheapest paths first; returns null if no reliable signal is found.
  *
- * Props (all passed from page.js):
- *   theme, simulation, statusConfig, advancedCount, formatDate,
- *   handleAdvanceQuarter, actionLoading,
- *   setShowEventModal, setShowEnrollModal, fetchStudents, setShowFeatureModal,
- *   dataVisibility, handleToggleDataVisibility, loadingVisibility
+ *   1. simulation.unplacedCount        — explicit count
+ *   2. simulation.unplaced.length      — array from allocation endpoint
+ *   3. totalEnrolled − sum(memberCount) — derived
+ *
+ * Returns null when none of the above are present so the caller can fall
+ * back to a network fetch instead of showing a misleading "0".
  */
+function deriveUnplaced(simulation) {
+  if (!simulation) return null;
+
+  if (typeof simulation.unplacedCount === "number") {
+    return simulation.unplacedCount;
+  }
+  if (Array.isArray(simulation.unplaced)) {
+    return simulation.unplaced.length;
+  }
+  if (
+    typeof simulation.totalEnrolled === "number" &&
+    Array.isArray(simulation.firms)
+  ) {
+    const placed = simulation.firms.reduce(
+      (sum, f) => sum + (typeof f.memberCount === "number" ? f.memberCount : 0),
+      0,
+    );
+    return Math.max(0, simulation.totalEnrolled - placed);
+  }
+  return null;
+}
+
 export default function Header({
-  theme,              // legacy prop — kept but unused for styling
+  theme,
   simulation,
-  statusConfig,       // legacy prop from old system — we re-derive below
+  statusConfig,
   advancedCount,
   formatDate,
   handleAdvanceQuarter,
@@ -110,13 +128,53 @@ export default function Header({
   handleToggleDataVisibility,
   loadingVisibility,
 }) {
+  const params = useParams();
   const { isDark } = useTheme();
   const t = isDark ? DARK : LIGHT;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
   const statusCfg = (isDark ? STATUS_DARK : STATUS_LIGHT)[simulation?.status]
     || (isDark ? STATUS_DARK : STATUS_LIGHT).CREATED;
 
   const isCompleted = simulation?.status === "COMPLETED";
+
+  // Try to derive unplaced count from the simulation prop first
+  const derivedUnplaced = deriveUnplaced(simulation);
+
+  // Fallback: if the parent didn't pass enough info, fetch from the
+  // allocation endpoint. Refreshes when simulationId changes or when the
+  // simulation object updates (e.g. after enrollment changes).
+  const [fetchedUnplaced, setFetchedUnplaced] = useState(null);
+
+  useEffect(() => {
+    if (derivedUnplaced !== null) return;       // already have it
+    if (!params?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiUrl}/simulations/${params.id}/enrollments`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("access_token")}`,
+              Accept: "*/*",
+            },
+          },
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setFetchedUnplaced(
+          Array.isArray(data.unplaced) ? data.unplaced.length : 0,
+        );
+      } catch {
+        // Silently fail — badge just won't show. Faculty can still click through.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [apiUrl, params?.id, derivedUnplaced, simulation?.updatedAt]);
+
+  const unplacedCount = derivedUnplaced ?? fetchedUnplaced ?? 0;
 
   const css = `
     .hdr-pb { transition: background-color 0.12s; }
@@ -148,7 +206,6 @@ export default function Header({
                 {simulation?.name || "—"}
               </h1>
 
-              {/* Status badge */}
               <span style={{
                 padding: "3px 9px", borderRadius: 4,
                 fontSize: 11, fontWeight: 600, letterSpacing: "0.02em",
@@ -159,7 +216,6 @@ export default function Header({
                 {statusCfg.label}
               </span>
 
-              {/* Advanced modules badge */}
               {advancedCount > 0 && (
                 <span style={{
                   padding: "3px 9px", borderRadius: 4,
@@ -174,7 +230,6 @@ export default function Header({
               )}
             </div>
 
-            {/* FIX 2: Meta chips with SVG icons instead of emojis */}
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <MetaChip icon={ICONS.tag}      label={simulation?.courseCode}     t={t} />
               <MetaChip icon={ICONS.building} label={simulation?.institutionName} t={t} />
@@ -187,20 +242,48 @@ export default function Header({
           {/* Right: action buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
 
-            {/* Enroll students */}
-            <button
-              className="hdr-tb"
-              onClick={() => { fetchStudents?.(); setShowEnrollModal?.(true); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 5,
-                padding: "7px 14px", borderRadius: 6, cursor: "pointer",
-                border: `1px solid ${t.border}`, background: t.bgSurface,
-                color: t.textSec, fontSize: 13, fontWeight: 500,
-              }}
-            >
-              <Icon d={ICONS.addUser} size={14} />
-              Enroll Students
-            </button>
+            {/* Allocate firms — badge shows count of unplaced students */}
+            <Link href={`/dashboard/faculty/simulations/${params.id}/firm-allocation`}
+                  style={{ textDecoration: "none" }}>
+              <button
+                className="hdr-tb"
+                title={
+                  unplacedCount > 0
+                    ? `${unplacedCount} student${unplacedCount === 1 ? "" : "s"} waiting for firm placement`
+                    : "Allocate students to firms"
+                }
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "7px 14px", borderRadius: 6, cursor: "pointer",
+                  border: `1px solid ${unplacedCount > 0
+                    ? (isDark ? t.amberBorder : "#FCD34D")
+                    : t.border}`,
+                  background: t.bgSurface,
+                  color: t.textSec, fontSize: 13, fontWeight: 500,
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                Allocate firms
+                {unplacedCount > 0 && (
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    minWidth: 18, height: 18, padding: "0 5px",
+                    borderRadius: 999,
+                    background: t.amber, color: "#fff",
+                    fontSize: 10, fontWeight: 800,
+                    marginLeft: 2,
+                  }}>
+                    {unplacedCount}
+                  </span>
+                )}
+              </button>
+            </Link>
 
             {/* Toggle data visibility */}
             <button
@@ -258,7 +341,7 @@ export default function Header({
               <Icon d={ICONS.gear} size={15} />
             </button>
 
-            {/* Advance quarter — primary CTA */}
+            {/* Advance quarter */}
             <button
               className="hdr-pb"
               onClick={handleAdvanceQuarter}

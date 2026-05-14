@@ -587,26 +587,28 @@ export default function SimulationDetailPage() {
           {/* Alerts */}
           <Alerts error={error} success={success} setError={setError} setSuccess={setSuccess} />
 
-          {/* Page header strip (sim name, status badge, action buttons) */}
-          <Header
-            theme={theme}
-            simulation={simulation}
-            statusConfig={statusConfig}
-            advancedCount={advancedCount}
-            formatDate={formatDate}
-            handleAdvanceQuarter={handleAdvanceQuarter}
-            actionLoading={actionLoading}
-            setShowEventModal={setShowEventModal}
-            setShowEnrollModal={setShowEnrollModal}
-            fetchStudents={fetchStudents}
-            setShowFeatureModal={setShowFeatureModal}
-            dataVisibility={dataVisibility}
-            handleToggleDataVisibility={handleToggleDataVisibility}
-            loadingVisibility={loadingVisibility}
-          />
+          {/* Page header strip (sim name, status badge, action buttons) — hidden during invites tab */}
+          <div style={{ display: activeTab === "invites" ? "none" : "block" }}>
+            <Header
+              theme={theme}
+              simulation={simulation}
+              statusConfig={statusConfig}
+              advancedCount={advancedCount}
+              formatDate={formatDate}
+              handleAdvanceQuarter={handleAdvanceQuarter}
+              actionLoading={actionLoading}
+              setShowEventModal={setShowEventModal}
+              setShowEnrollModal={setShowEnrollModal}
+              fetchStudents={fetchStudents}
+              setShowFeatureModal={setShowFeatureModal}
+              dataVisibility={dataVisibility}
+              handleToggleDataVisibility={handleToggleDataVisibility}
+              loadingVisibility={loadingVisibility}
+            />
+          </div>
 
           {/* Quarter progress card */}
-          <div style={{ marginTop: 16 }}>
+          <div style={{ marginTop: 16, display: activeTab === "invites" ? "none" : "block" }}>
             <ProgressCard
               theme={theme}
               isDark={isDark}

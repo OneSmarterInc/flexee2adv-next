@@ -16,6 +16,8 @@ const ADVANCED_MODULES = {
   intelligenceCenter:    { label: "Intelligence Center",   icon: "📊" },
   vmi:                   { label: "VMI",                   icon: "🤝" },
   analyticsMode:         { label: "Analytics Mode",        icon: "📈" },
+  productInnovation:     { label: "Product Innovation",    icon: "🆕" },
+  marketExpansion:       { label: "Market Expansion",      icon: "🌍" },
 };
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
@@ -141,19 +143,40 @@ function StatusBadge({ status, isDark }) {
 }
 
 // ─── MODULE CHIP ───────────────────────────────────────────────────────────────
-function ModuleChip({ count, isDark, t }) {
-  if (count === 0) return (
-    <div style={{
-      padding: "2px 8px", borderRadius: 4,
-      background: t.bgElevated, border: `1px solid ${t.border}`,
-      fontSize: 10, fontWeight: 600, color: t.textDisabled,
-      whiteSpace: "nowrap",
-    }}>
-      None
-    </div>
-  );
+function ModuleChip({ openCount, scheduledCount, isDark, t }) {
+  if (openCount === 0 && scheduledCount === 0) {
+    return (
+      <div style={{
+        padding: "2px 8px", borderRadius: 4,
+        background: t.bgElevated, border: `1px solid ${t.border}`,
+        fontSize: 10, fontWeight: 600, color: t.textDisabled,
+        whiteSpace: "nowrap",
+      }}>
+        None
+      </div>
+    );
+  }
+
+  // Just open modules, no schedule pending
+  if (scheduledCount === 0) {
+    return (
+      <div style={{
+        padding: "2px 8px", borderRadius: 4,
+        background: isDark ? "rgba(139,92,246,0.12)" : "#EDE9FE",
+        border: `1px solid ${isDark ? "rgba(139,92,246,0.3)" : "#C4B5FD"}`,
+        fontSize: 10, fontWeight: 700,
+        color: isDark ? "#C4B5FD" : "#5B21B6",
+        whiteSpace: "nowrap",
+      }}>
+        {openCount} open
+      </div>
+    );
+  }
+
+  // Has scheduled modules — show both with a divider
   return (
     <div style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
       padding: "2px 8px", borderRadius: 4,
       background: isDark ? "rgba(139,92,246,0.12)" : "#EDE9FE",
       border: `1px solid ${isDark ? "rgba(139,92,246,0.3)" : "#C4B5FD"}`,
@@ -161,7 +184,11 @@ function ModuleChip({ count, isDark, t }) {
       color: isDark ? "#C4B5FD" : "#5B21B6",
       whiteSpace: "nowrap",
     }}>
-      {count} mod{count > 1 ? "s" : ""}
+      <span>{openCount} open</span>
+      <span style={{ opacity: 0.5 }}>·</span>
+      <span style={{ color: isDark ? "#FCD34D" : "#92400E" }}>
+        {scheduledCount} sched
+      </span>
     </div>
   );
 }
@@ -511,10 +538,24 @@ export default function AdminDashboard() {
     completed: simulations.filter((s) => (s.simulation || s).status === "COMPLETED").length,
   };
 
-  // Count enabled advanced modules
-  const countEnabledAdvanced = (features) => {
-    if (!features) return 0;
-    return Object.keys(ADVANCED_MODULES).filter((key) => features[key]).length;
+  // Count enabled advanced modules and scheduled ones
+  const countModules = (features, moduleSchedule, currentQuarter) => {
+    const keys = Object.keys(ADVANCED_MODULES);
+    if (!features && !moduleSchedule) return { open: 0, scheduled: 0 };
+
+    let open = 0;
+    let scheduled = 0;
+    for (const k of keys) {
+      if (features?.[k]) {
+        open++;
+      } else {
+        const scheduledQuarter = moduleSchedule?.[k] ?? 0;
+        if (scheduledQuarter > 0 && scheduledQuarter > (currentQuarter ?? 0)) {
+          scheduled++;
+        }
+      }
+    }
+    return { open, scheduled };
   };
 
   // Theme classes
@@ -830,7 +871,8 @@ export default function AdminDashboard() {
             {/* Rows */}
             {filtered.length > 0 ? filtered.map((item, idx) => {
               const sim = item.simulation || item;
-              const modCount = countEnabledAdvanced(sim.features);
+              const { open: modOpen, scheduled: modScheduled } =
+                countModules(sim.features, sim.moduleSchedule, sim.currentQuarter);
               const qCur = sim.currentQuarter || 0;
               const qMax = sim.maxQuarters || 12;
               const qPct = qMax ? Math.round(qCur / qMax * 100) : 0;
@@ -941,7 +983,12 @@ export default function AdminDashboard() {
 
                   {/* Module count chip */}
                   <div style={{ display: "flex", justifyContent: "center" }}>
-                    <ModuleChip count={modCount} isDark={isDark} t={t} />
+                    <ModuleChip
+                      openCount={modOpen}
+                      scheduledCount={modScheduled}
+                      isDark={isDark}
+                      t={t}
+                    />
                   </div>
 
                   {/* Action buttons */}
@@ -1006,7 +1053,9 @@ export default function AdminDashboard() {
                 padding: "10px 16px", borderTop: `1px solid ${t.border}`, background: t.tableHead,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <span style={{ fontSize: 11, color: t.textMuted }}>Modules shows count of enabled advanced features</span>
+                  <span style={{ fontSize: 11, color: t.textMuted }}>
+                    Modules: currently open · scheduled to unlock later
+                  </span>
                 </div>
                 <span style={{ fontSize: 12, color: t.textMuted }}>
                   Showing {filtered.length} of {simulations.length} simulations

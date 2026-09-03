@@ -92,7 +92,7 @@ export function OperationsTab({
                 Forecast Accuracy (MAPE)
               </span>
               <span className="text-xl font-bold text-blue-400">
-                {formatPercent(1 - currentData.mape)}
+                {currentData.mape != null ? formatPercent(1 - currentData.mape) : "—"}
               </span>
             </div>
             <div

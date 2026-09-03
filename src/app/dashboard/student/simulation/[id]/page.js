@@ -167,6 +167,7 @@ export default function SimulationDashboard() {
   const [firm,           setFirm]           = useState(null);
   const [currentQuarter, setCurrentQuarter] = useState(null);
   const [kpiReports,     setKpiReports]     = useState([]);
+  const [supplierScore,  setSupplierScore]  = useState(null);
   const [competitorData, setCompetitorData] = useState(null);
   const [dataVisibility, setDataVisibility] = useState(null);
   const [loadingVisibility, setLoadingVisibility] = useState(false);
@@ -522,7 +523,7 @@ export default function SimulationDashboard() {
 
       const [
         kpiRaw, compRaw, decRaw, creditRaw,
-        bscAllRaw, firmBscRaw, analyticsRaw, sopRaw, greenRaw,
+        bscAllRaw, firmBscRaw, analyticsRaw, sopRaw, greenRaw, supplierRaw,
       ] = await Promise.all([
         apiFetch(`${apiUrl}/reports/kpi-history/${params.id}/${fid}`),
         apiFetch(`${apiUrl}/reports/competitor-comparison/${params.id}/${fid}/${quarter}`),
@@ -533,7 +534,10 @@ export default function SimulationDashboard() {
         apiFetch(`${apiUrl}/simulations/${params.id}/firms/${fid}/analytics-dashboard?quarter=${quarter}`),
         apiFetch(`${apiUrl}/simulations/${params.id}/firms/${fid}/sop-dashboard?quarter=${quarter}`),
         apiFetch(`${apiUrl}/simulations/${params.id}/firms/${fid}/green-score`),
+        apiFetch(`${apiUrl}/simulations/${params.id}/firms/${fid}/supplier-scorecard`),
       ]);
+
+      setSupplierScore(supplierRaw || null);
 
       if (kpiRaw) {
         const raw = Array.isArray(kpiRaw) ? kpiRaw : kpiRaw.history || [];
@@ -557,7 +561,7 @@ export default function SimulationDashboard() {
           capacityUtil:      k.operations?.capacityUtilization || 0,
           defectRate:        k.operations?.defectRate          || 0,
           onTimeDelivery:    k.operations?.onTimeDelivery      || 0,
-          mape:              k.operations?.mape                || 0,
+          mape:              k.operations?.mape                ?? null,
           unitsProduced:     k.operations?.unitsProduced       || 0,
           unitsSold:         k.operations?.unitsSold           || 0,
           rawMtlUnits:       k.inventory?.rawMaterialUnits   || 0,
@@ -713,26 +717,26 @@ export default function SimulationDashboard() {
   } : null;
 
   const kpiCards = [
-    { label: "Revenue",          accent: t.accent,  value: latest?.revenue         ? fmt(latest.revenue, true)                                                                   : "—", sub: prev?.revenue         ? `Prior: ${fmt(prev.revenue, true)}` : "No prior data", change: prev?.revenue         ? delta(latest?.revenue, prev.revenue)               : null },
-    { label: "Operating Margin", accent: t.green,   value: latest?.operatingMargin ? pct(latest.operatingMargin) : latest?.grossMarginPct ? pct(latest.grossMarginPct)           : "—", sub: "Target: 15.0%",                                                             change: prev?.operatingMargin ? delta(latest?.operatingMargin, prev.operatingMargin) : null },
-    { label: "Perfect Order",    accent: t.amber,   value: latest?.perfectOrder    ? pct(latest.perfectOrder)                                                                    : "—", sub: "Target: 92.0%",                                                             change: prev?.perfectOrder    ? delta(latest?.perfectOrder, prev.perfectOrder)       : null },
-    { label: "Market Share",     accent: t.green,   value: latest?.marketShare     ? pct(latest.marketShare)                                                                     : "—", sub: bscScores.rank ? `Rank #${bscScores.rank} of ${competitorData?.totalFirms || "—"}` : "—", change: prev?.marketShare ? delta(latest?.marketShare, prev.marketShare) : null },
+    { label: "Revenue",          accent: t.accent,  value: latest?.revenue         != null ? fmt(latest.revenue, true)                                                                   : "—", sub: prev?.revenue         ? `Prior: ${fmt(prev.revenue, true)}` : "No prior data", change: prev?.revenue         ? delta(latest?.revenue, prev.revenue)               : null },
+    { label: "Operating Margin", accent: t.green,   value: latest?.operatingMargin != null ? pct(latest.operatingMargin) : latest?.grossMarginPct != null ? pct(latest.grossMarginPct)           : "—", sub: "Target: 15.0%",                                                             change: prev?.operatingMargin ? delta(latest?.operatingMargin, prev.operatingMargin) : null },
+    { label: "Perfect Order",    accent: t.amber,   value: latest?.perfectOrder    != null ? pct(latest.perfectOrder)                                                                    : "—", sub: "Target: 92.0%",                                                             change: prev?.perfectOrder    ? delta(latest?.perfectOrder, prev.perfectOrder)       : null },
+    { label: "Market Share",     accent: t.green,   value: latest?.marketShare     != null ? pct(latest.marketShare)                                                                     : "—", sub: bscScores.rank ? `Rank #${bscScores.rank} of ${competitorData?.totalFirms || "—"}` : "—", change: prev?.marketShare ? delta(latest?.marketShare, prev.marketShare) : null },
     { label: "BSC Score",        accent: t.purple,  value: bscScores.overall       ? bscScores.overall.toFixed(1)                                                               : "—", sub: bscScores.grade !== "—" ? `Grade: ${bscScores.grade}` : "Awaiting data",       change: null },
-    { label: "Cash Position",    accent: t.teal,    value: latest?.cash            ? fmt(latest.cash, true)                                                                      : "—", sub: credit.availableCredit ? `Credit avail: ${fmt(credit.availableCredit, true)}` : "—", change: prev?.cash ? delta(latest?.cash, prev.cash) : null },
+    { label: "Cash Position",    accent: t.teal,    value: latest?.cash            != null ? fmt(latest.cash, true)                                                                      : "—", sub: credit.availableCredit ? `Credit avail: ${fmt(credit.availableCredit, true)}` : "—", change: prev?.cash ? delta(latest?.cash, prev.cash) : null },
   ];
 
   const opMetrics = [
-    { metric: "Forecast Accuracy (MAPE)",    actual: latest?.mape           ? pct(latest.mape)           : "—", target: "≤10%",   cur: latest?.mape,           tgt: 0.10, lowerIsBetter: true  },
-    { metric: "On-Time Delivery",            actual: latest?.onTimeDelivery ? pct(latest.onTimeDelivery) : "—", target: "95%",    cur: latest?.onTimeDelivery, tgt: 0.95, lowerIsBetter: false },
-    { metric: "Fill Rate",                   actual: latest?.fillRate       ? pct(latest.fillRate)       : "—", target: "96%",    cur: latest?.fillRate,       tgt: 0.96, lowerIsBetter: false },
-    { metric: "Defect Rate",                 actual: latest?.defectRate     ? pct(latest.defectRate, 2)  : "—", target: "≤2%",    cur: latest?.defectRate,     tgt: 0.02, lowerIsBetter: true  },
-    { metric: "Inventory Turnover",          actual: latest?.inventoryTurnover ? x(latest.inventoryTurnover) : "—", target: "7.0x", cur: latest?.inventoryTurnover, tgt: 7, lowerIsBetter: false },
-    { metric: "Customer Satisfaction (CSI)", actual: latest?.csi            ? latest.csi.toFixed(1)     : "—", target: "80+",    cur: latest?.csi,            tgt: 80,   lowerIsBetter: false },
-    { metric: "Capacity Utilization",        actual: latest?.capacityUtil   ? pct(latest.capacityUtil)  : "—", target: "75–90%", cur: latest?.capacityUtil,   tgt: null, lowerIsBetter: false },
+    { metric: "Forecast Accuracy (MAPE)",    actual: latest?.mape           != null ? pct(latest.mape)           : "—", target: "≤10%",   cur: latest?.mape,           tgt: 0.10, lowerIsBetter: true  },
+    { metric: "On-Time Delivery",            actual: latest?.onTimeDelivery != null ? pct(latest.onTimeDelivery) : "—", target: "95%",    cur: latest?.onTimeDelivery, tgt: 0.95, lowerIsBetter: false },
+    { metric: "Fill Rate",                   actual: latest?.fillRate       != null ? pct(latest.fillRate)       : "—", target: "96%",    cur: latest?.fillRate,       tgt: 0.96, lowerIsBetter: false },
+    { metric: "Defect Rate",                 actual: latest?.defectRate     != null ? pct(latest.defectRate, 2)  : "—", target: "≤2%",    cur: latest?.defectRate,     tgt: 0.02, lowerIsBetter: true  },
+    { metric: "Inventory Turnover",          actual: latest?.inventoryTurnover != null ? x(latest.inventoryTurnover) : "—", target: "7.0x", cur: latest?.inventoryTurnover, tgt: 7, lowerIsBetter: false },
+    { metric: "Customer Satisfaction (CSI)", actual: latest?.csi            != null ? latest.csi.toFixed(1)     : "—", target: "80+",    cur: latest?.csi,            tgt: 80,   lowerIsBetter: false },
+    { metric: "Capacity Utilization",        actual: latest?.capacityUtil   != null ? pct(latest.capacityUtil)  : "—", target: "75–90%", cur: latest?.capacityUtil,   tgt: null, lowerIsBetter: false },
     { metric: "Customer Retention",          actual: latest?.customersLoyal && (latest.customersLoyal + latest.customersInPlay + latest.customersChurned) > 0 ? pct(latest.customersLoyal / (latest.customersLoyal + latest.customersInPlay + latest.customersChurned)) : "—", target: "90%", cur: null, tgt: null, lowerIsBetter: false },
   ].map(m => {
     let type = "neutral";
-    if (m.cur != null && m.tgt != null) {
+    if (m.cur != null && !Number.isNaN(m.cur) && m.tgt != null) {
       const ok = m.lowerIsBetter ? m.cur <= m.tgt : m.cur >= m.tgt;
       type = ok ? "success" : (m.lowerIsBetter ? m.cur <= m.tgt * 1.3 : m.cur >= m.tgt * 0.85) ? "warning" : "error";
     }
@@ -969,6 +973,66 @@ export default function SimulationDashboard() {
                       <KRow label="Retailer Inventory"   value={num(inventory.retailerInventory)}    t={t} />
                       <KRow label="Weeks of Supply"      value={inventory.weeksOfSupply?.toFixed(1) || "—"} t={t} />
                     </div>
+                  </Card>
+                )}
+
+                {/* Inbound supplier scorecard — executive level, no part detail */}
+                {(dataVisibility?.showQuarterData !== false) &&
+                  supplierScore?.suppliers?.some(sp => sp.ordersPlaced > 0) && (
+                  <Card title="Supplier Scorecard" t={t}
+                    headerRight={<span style={{ fontSize: 11, color: t.textMuted }}>vs ${supplierScore.standardUnitCost}/unit standard</span>}>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ borderBottom: `1px solid ${t.border}`, color: t.textMuted }}>
+                            <th style={{ textAlign: "left",  padding: "6px 8px", fontWeight: 500 }}>Supplier</th>
+                            <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500 }}>On-Time</th>
+                            <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500 }}>Fill Rate</th>
+                            <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500 }}>Defects</th>
+                            <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500 }}>Avg Cost</th>
+                            <th style={{ textAlign: "right", padding: "6px 8px", fontWeight: 500 }}>Price Var</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {supplierScore.suppliers.filter(sp => sp.ordersPlaced > 0).map(sp => {
+                            const ppv = sp.purchasePriceVariancePct;
+                            return (
+                              <tr key={sp.supplierType} style={{ borderBottom: `1px solid ${t.border}` }}>
+                                <td style={{ padding: "6px 8px", color: t.textPrimary }}>
+                                  {sp.name}
+                                  <div style={{ fontSize: 10, color: t.textMuted }}>
+                                    {sp.location} · {sp.leadTimeQuarters === 0 ? "same quarter" : `${sp.leadTimeQuarters}q lead`}
+                                  </div>
+                                </td>
+                                <td style={{ padding: "6px 8px", textAlign: "right",
+                                  color: sp.onTimeDeliveryPct >= 95 ? t.green : sp.onTimeDeliveryPct >= 90 ? t.amber : t.red }}>
+                                  {sp.onTimeDeliveryPct != null ? sp.onTimeDeliveryPct.toFixed(0) + "%" : "—"}
+                                </td>
+                                <td style={{ padding: "6px 8px", textAlign: "right", color: t.textPrimary }}>
+                                  {sp.fillRatePct != null ? sp.fillRatePct.toFixed(1) + "%" : "—"}
+                                </td>
+                                <td style={{ padding: "6px 8px", textAlign: "right", color: t.textPrimary }}>
+                                  {sp.defectRatePct != null ? sp.defectRatePct.toFixed(2) + "%" : "—"}
+                                </td>
+                                <td style={{ padding: "6px 8px", textAlign: "right", color: t.textPrimary }}>
+                                  {sp.avgUnitCost != null ? "$" + sp.avgUnitCost.toFixed(2) : "—"}
+                                </td>
+                                <td style={{ padding: "6px 8px", textAlign: "right",
+                                  color: ppv == null ? t.textMuted : ppv > 0.5 ? t.red : ppv < -0.5 ? t.green : t.textMuted }}>
+                                  {ppv != null ? (ppv > 0 ? "+" : "") + ppv.toFixed(1) + "%" : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {supplierScore.total?.purchasePriceVariance != null && (
+                      <div style={{ marginTop: 10, fontSize: 11, color: t.textMuted }}>
+                        Total spend {fmt(supplierScore.total.totalSpend, true)} ·
+                        {" "}variance to standard {fmt(supplierScore.total.purchasePriceVariance, true)}
+                      </div>
+                    )}
                   </Card>
                 )}
 

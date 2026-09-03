@@ -32,7 +32,7 @@ const SEASON_CONFIG = {
 };
 
 const INITIAL_DECISIONS = {
-  forecastR1: 80000, forecastR2: 70000, forecastR3: 50000, forecastMethod: "GUT",
+  forecastR1: 240000, forecastR2: 210000, forecastR3: 150000, forecastMethod: "GUT",
   enterR4: false, forecastR4: 0, enterR5: false, forecastR5: 0, enterR6: false, forecastR6: 0,
   primarySupplier: "SUP001", secondarySupplier: "NONE", primaryAllocation: 100,
   emergencyRegionalOrder: 0,

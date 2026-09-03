@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const T = {
@@ -51,7 +51,18 @@ const STATE = {
 };
 
 
+// useSearchParams() forces client-side rendering, which breaks static
+// prerendering unless the component sits inside a Suspense boundary. Without
+// this the whole production build fails on this page.
 export default function AcceptInvitePage() {
+  return (
+    <Suspense fallback={null}>
+      <AcceptInviteContent />
+    </Suspense>
+  );
+}
+
+function AcceptInviteContent() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token");

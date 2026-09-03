@@ -93,7 +93,7 @@ export const transformKpiData = (kpi, quarter) => {
     capacityUtilization: kpi.operations?.capacityUtilization || 0,
     defectRate: kpi.operations?.defectRate || 0,
     onTimeDelivery: kpi.operations?.onTimeDelivery || 0,
-    mape: kpi.operations?.mape || 0,
+    mape: kpi.operations?.mape ?? null,
     unitsProduced: kpi.operations?.unitsProduced || 0,
     unitsSold: kpi.operations?.unitsSold || 0,
     // Inventory
